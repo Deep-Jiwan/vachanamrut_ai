@@ -1,0 +1,14 @@
+# Intermediate extraction output; rebuild with scripts/build_all.sh
+data/cache/
+
+# Derived at startup, or built only when an embedding backend is configured
+data/corpus/bm25.pkl
+data/corpus/vectors.json
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+.venv/

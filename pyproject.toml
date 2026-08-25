@@ -1,0 +1,28 @@
+[project]
+name = "vachanamrut-rag"
+version = "1.0.0"
+description = "Retrieval over the Vachanamrut with verbatim, paragraph-level citations, served over MCP"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.2",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+build = ["pdfplumber>=0.11"]
+local-embeddings = ["sentence-transformers>=3.0"]
+voyage = ["voyageai>=0.3"]
+openai = ["openai>=1.40"]
+gemini = ["google-genai>=0.3"]
+
+[project.scripts]
+vachanamrut = "vachanamrut_rag.cli:main"
+vachanamrut-mcp = "vachanamrut_rag.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
