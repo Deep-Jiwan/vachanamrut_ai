@@ -1,0 +1,7 @@
+vachanamrut_-_english.pdf
+data/cache/
+tests/
+scripts/
+.venv/
+__pycache__/
+*.egg-info/

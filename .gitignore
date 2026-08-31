@@ -12,3 +12,9 @@ __pycache__/
 build/
 dist/
 .venv/
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+.vercel/
