@@ -8,6 +8,17 @@
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index" }
+    {
+      "source": "/api/ask",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/login",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/health",
+      "destination": "/api/index"
+    }
   ]
 }

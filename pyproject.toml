@@ -7,6 +7,10 @@ requires-python = ">=3.10"
 dependencies = [
     "mcp>=1.2",
     "pydantic>=2",
+    # The web app is deployed from this same project, and some hosts install
+    # from pyproject rather than requirements.txt.
+    "fastapi>=0.115",
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
