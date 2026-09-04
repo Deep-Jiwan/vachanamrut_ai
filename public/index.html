@@ -21,6 +21,9 @@
     --warn: #9a3324;
     --warn-soft: #f6dfda;
     --radius: 12px;
+    --ease: cubic-bezier(.22,.61,.36,1);
+    --fast: 130ms;
+    --base: 240ms;
     --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
     --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
@@ -166,6 +169,67 @@
   .dots::after { content: "▊"; animation: blink 1s steps(2) infinite; color: var(--accent); }
   @keyframes blink { 50% { opacity: 0; } }
   .hidden { display: none !important; }
+
+  /* ---- motion ---------------------------------------------------------
+     One keyframe and one class for the whole app. Everything that appears
+     uses `rise`, varying only delay and distance through custom properties,
+     so the timing is consistent everywhere and there is a single place to
+     change it. Interactive elements share the same easing at a shorter
+     duration, so hovering and pressing feel like part of the same system. */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(var(--rise, 7px)); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes spinner { to { transform: rotate(1turn); } }
+
+  .anim,
+  section.card,
+  .hitem,
+  .fb-item,
+  .gate-box,
+  .err,
+  .note,
+  #view-ask:not([hidden]),
+  #view-history:not([hidden]) {
+    animation: rise var(--base) var(--ease) both;
+    animation-delay: var(--d, 0ms);
+  }
+
+  /* The gate fades rather than lifts; the panel inside it does the lifting. */
+  #gate { animation: rise var(--base) var(--ease) both; --rise: 0px; }
+  .gate-box { --d: 60ms; --rise: 10px; }
+
+  .chip, .rate, .tab, .linkbtn, .hhead, .card > h2,
+  button.go, .fb-send, .gate-box button.primary,
+  .search, .fb-text, #form, .gate-box input {
+    transition: background var(--fast) var(--ease),
+                border-color var(--fast) var(--ease),
+                color var(--fast) var(--ease),
+                opacity var(--fast) var(--ease),
+                transform var(--fast) var(--ease);
+  }
+  .chip:active, .rate:active, button.go:active:not(:disabled),
+  .fb-send:active:not(:disabled),
+  .gate-box button.primary:active:not(:disabled) { transform: scale(.97); }
+
+  .pill { transition: background var(--base) var(--ease), color var(--base) var(--ease); }
+  .pill.bump { animation: rise var(--base) var(--ease) both; --rise: -5px; }
+
+  .spin::before {
+    content: ""; display: inline-block; width: 13px; height: 13px;
+    margin-right: 9px; vertical-align: -2px;
+    border: 2px solid var(--line); border-top-color: var(--accent);
+    border-radius: 50%; animation: spinner 700ms linear infinite;
+  }
+
+  /* Anyone who has asked their system for less movement gets none of it. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 1ms !important;
+    }
+  }
 
   /* ---- feedback ---- */
   .fb-form { padding: 16px 18px; }
@@ -413,10 +477,15 @@ const GATE_REASONS = {
 
 function setQuota(remaining, unlimited) {
   const pill = $("quota-pill");
+  const before = pill.textContent;
   if (unlimited) { pill.textContent = "unlimited"; pill.classList.remove("low"); return; }
   const n = remaining ?? 0;
   pill.textContent = n + (n === 1 ? " question left" : " questions left");
   pill.classList.toggle("low", n <= 2);
+  // Replaying an animation needs the class off, a reflow, then on again.
+  if (before !== pill.textContent && before !== "—") {
+    pill.classList.remove("bump"); void pill.offsetWidth; pill.classList.add("bump");
+  }
 }
 
 function showGate(message) {
@@ -521,8 +590,8 @@ const verifiedHTML = quotes => (quotes || []).map(q => `
 const RATING_WORDS = ["bad", "poor", "fair", "ok", "good", "very good"];
 const scoreClass = r => r >= 4 ? "good" : r <= 1 ? "poor" : "";
 
-const feedbackListHTML = list => (list || []).map(f => `
-  <div class="fb-item">
+const feedbackListHTML = list => (list || []).map((f, i) => `
+  <div class="fb-item" style="--d:${Math.min(i, 8) * 30}ms">
     <div class="fb-head">
       ${f.rating === null || f.rating === undefined ? ""
         : `<span class="score ${scoreClass(f.rating)}">${f.rating}/5 &middot; ${RATING_WORDS[f.rating]}</span>`}
@@ -739,8 +808,8 @@ function drawHistory() {
     return;
   }
 
-  $("hlist").innerHTML = rows.map(e => `
-    <div class="hitem" data-id="${esc(e.id)}">
+  $("hlist").innerHTML = rows.map((e, i) => `
+    <div class="hitem" data-id="${esc(e.id)}" style="--d:${Math.min(i, 12) * 28}ms">
       <div class="hhead">
         <div class="hq">${esc(e.question)}
           <div class="hmeta">
