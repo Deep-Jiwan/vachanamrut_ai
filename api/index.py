@@ -303,10 +303,26 @@ async def health():
         return JSONResponse(info, status_code=500)
 
 
-# Local development only. On Vercel the static files are served by the CDN and
-# never reach this function.
+@app.api_route("/{full_path:path}", methods=["GET", "POST"])
+async def catchall(request: Request, full_path: str):
+    """Reports the path the app actually received.
+
+    A rewrite can hand the function a path other than the one the browser asked
+    for, which looks exactly like a 404 from the outside. Naming the received
+    path turns that into something readable.
+    """
+    return JSONResponse({
+        "error": "No route matched.",
+        "received_path": request.url.path,
+        "method": request.method,
+        "routes": sorted({r.path for r in app.routes if hasattr(r, "path")}),
+    }, status_code=404)
+
+
+# Local development only. On Vercel the CDN serves the static files, and
+# mounting them here would shadow the API routes.
 _PUBLIC = ROOT / "public"
-if _PUBLIC.is_dir():
+if _PUBLIC.is_dir() and not os.environ.get("VERCEL"):
     from fastapi.staticfiles import StaticFiles
 
     app.mount("/", StaticFiles(directory=str(_PUBLIC), html=True), name="static")
