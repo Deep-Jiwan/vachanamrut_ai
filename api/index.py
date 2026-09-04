@@ -40,6 +40,7 @@ Retriever = None
 IMPORT_ERROR: str | None = None
 try:
     from vachanamrut_rag.retrieve import Retriever  # type: ignore[no-redef]
+    from vachanamrut_web import history, store, vouchers
 except Exception:                                   # bundling or dependency fault
     IMPORT_ERROR = traceback.format_exc()
 
@@ -79,7 +80,15 @@ def retriever():
 
 
 def password_ok(supplied: str | None) -> bool:
-    """Constant-time check. An unset APP_PASSWORD leaves the app open."""
+    """Constant-time check on the shared password.
+
+    Vouchers supersede it: once they are configured they are the way in, and a
+    leftover APP_PASSWORD would otherwise lock everyone out silently, since the
+    voucher UI has no password field to send. An unset password leaves the app
+    open, which is what keeps local development ungated.
+    """
+    if IMPORT_ERROR is None and vouchers.enabled():
+        return True
     if not APP_PASSWORD:
         return True
     return bool(supplied) and hmac.compare_digest(supplied, APP_PASSWORD)
@@ -170,10 +179,18 @@ class Ask(BaseModel):
     question: str = Field(min_length=2, max_length=2000)
     limit: int = Field(default=DEFAULT_LIMIT, ge=1, le=20)
     section: str | None = None
+    voucher: str = Field(default="", max_length=32)
+    device: str = Field(default="", max_length=64)
 
 
 class Login(BaseModel):
     password: str = Field(default="", max_length=200)
+
+
+class VoucherCheck(BaseModel):
+    code: str = Field(default="", max_length=32)
+    device: str = Field(default="", max_length=64)
+    claim: bool = False
 
 
 def sse(event: dict) -> str:
@@ -194,17 +211,15 @@ async def stream_answer(ask: Ask) -> AsyncIterator[str]:
         yield sse({"type": "error", "message": f"Retrieval failed: {exc}"})
         return
 
-    yield sse({
-        "type": "sources",
-        "sources": [{
-            "citation": r.chunk.citation,
-            "discourse": r.chunk.discourse_citation,
-            "title": r.chunk.title,
-            "speaker": r.chunk.speaker,
-            "text": r.chunk.text,
-            "matched_by": r.reason,
-        } for r in results],
-    })
+    source_payload = [{
+        "citation": r.chunk.citation,
+        "discourse": r.chunk.discourse_citation,
+        "title": r.chunk.title,
+        "speaker": r.chunk.speaker,
+        "text": r.chunk.text,
+        "matched_by": r.reason,
+    } for r in results]
+    yield sse({"type": "sources", "sources": source_payload})
 
     if not results:
         yield sse({"type": "answer",
@@ -220,6 +235,8 @@ async def stream_answer(ask: Ask) -> AsyncIterator[str]:
     ]
 
     answer_parts: list[str] = []
+    reasoning_parts: list[str] = []
+    used_model = MODEL
     started = time.monotonic()
     state: dict = {"usage": None, "error": None, "timed_out": False}
 
@@ -254,6 +271,7 @@ async def stream_answer(ask: Ask) -> AsyncIterator[str]:
                         for choice in parsed.get("choices", []):
                             delta = choice.get("delta") or {}
                             if delta.get("reasoning_content"):
+                                reasoning_parts.append(delta["reasoning_content"])
                                 yield sse({"type": "reasoning",
                                            "text": delta["reasoning_content"]})
                             if delta.get("content"):
@@ -277,6 +295,7 @@ async def stream_answer(ask: Ask) -> AsyncIterator[str]:
                            f"The reasoning model was still thinking after "
                            f"{int(ANSWER_DEADLINE)}s, so the answer comes from "
                            f"{FALLBACK_MODEL}, using the same passages."})
+                used_model = FALLBACK_MODEL
                 async for event in run(client, FALLBACK_MODEL, None):
                     yield event
                 if state["error"]:
@@ -288,12 +307,23 @@ async def stream_answer(ask: Ask) -> AsyncIterator[str]:
 
     usage = state["usage"]
     answer = "".join(answer_parts)
+    entry_id = None
     if answer:
-        yield sse({"type": "verified", "quotes": verify_answer(answer)})
+        checked = verify_answer(answer)
+        yield sse({"type": "verified", "quotes": checked})
+        try:
+            entry_id = history.record(
+                question=ask.question, answer=answer,
+                reasoning="".join(reasoning_parts), sources=source_payload,
+                verified=checked, model=used_model,
+                elapsed=time.monotonic() - started)
+        except Exception as exc:      # history must never break an answer
+            yield sse({"type": "notice",
+                       "message": f"Answer delivered but not saved to history: {exc}"})
     else:
         yield sse({"type": "error",
                    "message": "The model produced reasoning but no answer."})
-    yield sse({"type": "done", "usage": usage})
+    yield sse({"type": "done", "usage": usage, "entry_id": entry_id})
 
 
 async def login(body: Login):
@@ -302,14 +332,50 @@ async def login(body: Login):
     return {"ok": True, "required": bool(APP_PASSWORD)}
 
 
+async def voucher_check(body: VoucherCheck):
+    """Look a voucher up, and bind it to this browser when `claim` is set."""
+    code = (body.code or "").strip()
+    result = (vouchers.claim(code, body.device) if body.claim
+              else vouchers.status(code, body.device))
+    result["enabled"] = vouchers.enabled()
+    result["limit"] = vouchers.QUESTIONS_PER_VOUCHER
+    return JSONResponse(result, status_code=200 if result.get("ok") else 403)
+
+
+async def history_list(request: Request):
+    query = (request.query_params.get("q") or "").strip().lower()
+    entries = history.listing(limit=int(request.query_params.get("limit") or 300))
+    if query:
+        entries = [e for e in entries
+                   if query in e.get("question", "").lower()
+                   or any(query in c.lower() for c in e.get("citations", []))]
+    return {"count": len(entries), "total": history.count(), "entries": entries}
+
+
+async def history_entry(request: Request):
+    entry = history.entry((request.query_params.get("id") or "").strip())
+    if entry is None:
+        return JSONResponse({"error": "No such entry."}, status_code=404)
+    return entry
+
+
 async def ask(body: Ask, supplied_password: str | None):
     if not password_ok(supplied_password):
         return JSONResponse({"ok": False, "error": "Password required."}, status_code=401)
+
+    # Spend before calling the model, so an exhausted voucher costs nothing and
+    # a question is never charged for an answer that was never produced.
+    spent = vouchers.spend((body.voucher or "").strip(), body.device)
+    if not spent.get("ok"):
+        return JSONResponse({"ok": False, "error": "voucher", **spent},
+                            status_code=402)
+
     return StreamingResponse(
         stream_answer(body),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache, no-transform",
-                 "X-Accel-Buffering": "no"},
+                 "X-Accel-Buffering": "no",
+                 "X-Voucher-Remaining": str(spent.get("remaining"))},
     )
 
 
@@ -322,6 +388,10 @@ async def health():
         "model": MODEL,
         "fallback_model": FALLBACK_MODEL,
         "answer_deadline_s": ANSWER_DEADLINE,
+        "vouchers_enabled": bool(IMPORT_ERROR is None and vouchers.enabled()),
+        "questions_per_voucher": None if IMPORT_ERROR else vouchers.QUESTIONS_PER_VOUCHER,
+        "storage": None if IMPORT_ERROR else store.describe(),
+        "history_entries": None if IMPORT_ERROR else history.count(),
         "root": str(ROOT),
         "corpus_dir": CORPUS_DIR,
         "corpus_dir_exists": Path(CORPUS_DIR).is_dir(),
@@ -378,11 +448,24 @@ async def dispatch(request: Request, rest: str):
                                 status_code=422)
         return await ask(body, request.headers.get("x-app-password"))
 
+    if action == "voucher":
+        try:
+            body = VoucherCheck(**(await request.json()))
+        except Exception:
+            body = VoucherCheck()
+        return await voucher_check(body)
+
+    if action == "history":
+        return await history_list(request)
+
+    if action == "entry":
+        return await history_entry(request)
+
     return JSONResponse({
         "error": "No such endpoint.",
         "action": action,
         "received_path": request.url.path,
-        "available": ["ask", "login", "health"],
+        "available": ["ask", "login", "health", "voucher", "history", "entry"],
     }, status_code=404)
 
 

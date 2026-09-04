@@ -27,42 +27,60 @@
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #16140f;
-      --panel: #1e1b15;
-      --panel-2: #26221a;
-      --ink: #ede7db;
-      --ink-soft: #b5ad9d;
-      --ink-faint: #857d6e;
-      --line: #332d23;
-      --accent: #d99b5a;
-      --accent-soft: #33281a;
-      --ok: #7fc99e;
-      --ok-soft: #1d2f25;
-      --warn: #e08d7d;
-      --warn-soft: #33201c;
+      --bg: #16140f;  --panel: #1e1b15;  --panel-2: #26221a;
+      --ink: #ede7db;  --ink-soft: #b5ad9d;  --ink-faint: #857d6e;
+      --line: #332d23; --accent: #d99b5a;  --accent-soft: #33281a;
+      --ok: #7fc99e;   --ok-soft: #1d2f25; --warn: #e08d7d; --warn-soft: #33201c;
     }
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
-    font-family: var(--sans); line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
+    font-family: var(--sans); line-height: 1.6; -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 96px; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 26px 20px 96px; }
 
-  header { text-align: center; margin-bottom: 28px; }
-  h1 {
-    font-family: var(--serif); font-weight: 600; font-size: clamp(30px, 6vw, 42px);
+  /* ---- top bar ---- */
+  .top {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding-bottom: 18px; border-bottom: 1px solid var(--line); margin-bottom: 24px;
+  }
+  .brand {
+    font-family: var(--serif); font-weight: 600; font-size: 25px;
+    letter-spacing: -0.01em; margin: 0; cursor: pointer;
+  }
+  .tabs { display: flex; gap: 4px; margin-left: 6px; }
+  .tab {
+    border: 0; background: transparent; color: var(--ink-soft); cursor: pointer;
+    font: 600 13.5px var(--sans); padding: 7px 14px; border-radius: 8px;
+  }
+  .tab:hover { color: var(--ink); background: var(--panel-2); }
+  .tab.on { background: var(--accent-soft); color: var(--accent); }
+  .spacer { flex: 1; }
+  .quota { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--ink-soft); }
+  .pill {
+    font: 600 12.5px var(--sans); color: var(--accent); background: var(--accent-soft);
+    border-radius: 999px; padding: 4px 12px; white-space: nowrap;
+  }
+  .pill.low { color: var(--warn); background: var(--warn-soft); }
+  .linkbtn {
+    border: 0; background: transparent; color: var(--ink-faint); cursor: pointer;
+    font: 500 12.5px var(--sans); text-decoration: underline; padding: 2px;
+  }
+  .linkbtn:hover { color: var(--accent); }
+
+  h1.title {
+    font-family: var(--serif); font-weight: 600; font-size: clamp(26px, 5vw, 34px);
     margin: 0 0 6px; letter-spacing: -0.01em;
   }
-  .sub { color: var(--ink-soft); font-size: 15px; margin: 0; }
+  .sub { color: var(--ink-soft); font-size: 14.5px; margin: 0 0 20px; }
   .sub b { color: var(--accent); font-weight: 600; }
 
+  /* ---- ask ---- */
   #form {
-    display: flex; gap: 10px; margin: 26px 0 14px;
+    display: flex; gap: 10px; margin: 20px 0 14px;
     background: var(--panel); border: 1px solid var(--line);
     border-radius: var(--radius); padding: 10px;
-    box-shadow: 0 1px 3px rgba(0,0,0,.05);
   }
   #form:focus-within { border-color: var(--accent); }
   textarea {
@@ -74,7 +92,7 @@
   button.go {
     align-self: flex-end; border: 0; border-radius: 8px; cursor: pointer;
     background: var(--accent); color: #fff; font: 600 15px/1 var(--sans);
-    padding: 12px 20px; transition: opacity .15s;
+    padding: 12px 20px;
   }
   button.go:disabled { opacity: .45; cursor: default; }
 
@@ -82,7 +100,7 @@
   .chip {
     border: 1px solid var(--line); background: var(--panel); color: var(--ink-soft);
     border-radius: 999px; padding: 6px 13px; font-size: 13px; cursor: pointer;
-    font-family: inherit; transition: all .15s;
+    font-family: inherit;
   }
   .chip:hover { border-color: var(--accent); color: var(--accent); }
 
@@ -99,47 +117,40 @@
   .card > h2 .count { margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; }
   .card > h2 .caret { transition: transform .2s; display: inline-block; }
   .card.collapsed .caret { transform: rotate(-90deg); }
-  .card.collapsed .body { display: none; }
+  .card.collapsed .body, .card.collapsed .reason-body,
+  .card.collapsed .answer-body, .card.collapsed .srcwrap { display: none; }
   .body { padding: 18px; }
 
-  #thinking .body {
+  .reason-body {
     font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
     color: var(--ink-soft); white-space: pre-wrap; word-break: break-word;
-    max-height: 320px; overflow-y: auto; background: var(--panel-2);
+    max-height: 320px; overflow-y: auto; background: var(--panel-2); padding: 16px;
   }
-
-  #answer .body { font-family: var(--serif); font-size: 18px; line-height: 1.72; }
-  #answer p { margin: 0 0 1em; }
-  #answer p:last-child { margin-bottom: 0; }
-  #answer q, #answer .quote {
+  .answer-body { font-family: var(--serif); font-size: 18px; line-height: 1.72; padding: 18px; }
+  .answer-body p { margin: 0 0 1em; }
+  .answer-body p:last-child { margin-bottom: 0; }
+  .answer-body .quote {
     color: var(--ink); background: var(--accent-soft);
     box-shadow: 0 0 0 2px var(--accent-soft); border-radius: 2px;
   }
   .cite {
     font-family: var(--sans); font-size: .78em; font-weight: 600;
     color: var(--accent); background: var(--accent-soft);
-    padding: 2px 7px; border-radius: 5px; white-space: nowrap;
-    cursor: pointer; text-decoration: none;
+    padding: 2px 7px; border-radius: 5px; white-space: nowrap; text-decoration: none;
   }
 
   .src { border-top: 1px solid var(--line); padding: 15px 18px; }
   .src:first-child { border-top: 0; }
-  .src:target { background: var(--accent-soft); }
   .src-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 9px; margin-bottom: 7px; }
   .src-cite { font: 600 13px var(--sans); color: var(--accent); }
   .src-title { font-size: 13px; color: var(--ink-faint); }
   .src-text { font-family: var(--serif); font-size: 15.5px; color: var(--ink-soft); margin: 0; }
-  .tag {
-    font: 500 11px var(--sans); color: var(--ink-faint);
-    border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px;
-  }
+  .tag { font: 500 11px var(--sans); color: var(--ink-faint);
+         border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
 
   .vq { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-top: 1px solid var(--line); }
   .vq:first-child { border-top: 0; padding-top: 0; }
-  .badge {
-    flex: none; font: 600 11px var(--sans); border-radius: 5px;
-    padding: 3px 8px; letter-spacing: .02em;
-  }
+  .badge { flex: none; font: 600 11px var(--sans); border-radius: 5px; padding: 3px 8px; }
   .badge.ok { color: var(--ok); background: var(--ok-soft); }
   .badge.no { color: var(--warn); background: var(--warn-soft); }
   .vq-text { font-family: var(--serif); font-size: 14.5px; color: var(--ink-soft); }
@@ -149,106 +160,137 @@
     border-radius: var(--radius); padding: 14px 18px; margin-top: 18px; font-size: 15px;
   }
   .note {
-    background: var(--accent-soft); color: var(--accent);
-    border: 1px solid var(--accent); border-radius: var(--radius);
-    padding: 11px 16px; margin-top: 18px; font-size: 13.5px;
+    background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent);
+    border-radius: var(--radius); padding: 11px 16px; margin-top: 18px; font-size: 13.5px;
   }
-  .dots::after {
-    content: "▊"; animation: blink 1s steps(2) infinite; color: var(--accent);
-  }
+  .dots::after { content: "▊"; animation: blink 1s steps(2) infinite; color: var(--accent); }
   @keyframes blink { 50% { opacity: 0; } }
   .hidden { display: none !important; }
 
-  /* Password gate */
+  /* ---- history ---- */
+  .search {
+    width: 100%; border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--panel); color: var(--ink); font: 15px var(--sans);
+    padding: 13px 16px; outline: 0;
+  }
+  .search:focus { border-color: var(--accent); }
+  .hcount { font-size: 12.5px; color: var(--ink-faint); margin: 10px 2px 14px; }
+
+  .hitem {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); margin-bottom: 10px; overflow: hidden;
+  }
+  .hhead { padding: 14px 17px; cursor: pointer; display: flex; gap: 12px; align-items: flex-start; }
+  .hhead:hover { background: var(--panel-2); }
+  .hq { flex: 1; font-family: var(--serif); font-size: 16.5px; line-height: 1.45; }
+  .hmeta { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; margin-top: 8px; }
+  .hdate { font-size: 12px; color: var(--ink-faint); white-space: nowrap; }
+  .hdetail { border-top: 1px solid var(--line); padding: 4px 16px 16px; }
+  .hempty { text-align: center; color: var(--ink-faint); padding: 46px 20px; font-size: 15px; }
+  .spin { text-align: center; color: var(--ink-faint); padding: 26px; font-size: 14px; }
+
+  /* ---- voucher gate ---- */
   #gate {
     position: fixed; inset: 0; background: var(--bg); z-index: 50;
     display: flex; align-items: center; justify-content: center; padding: 20px;
+    overflow-y: auto;
   }
   .gate-box {
-    background: var(--panel); border: 1px solid var(--line);
-    border-radius: var(--radius); padding: 32px; width: 100%; max-width: 380px;
+    display: block; background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 32px; width: 100%; max-width: 400px;
     text-align: center;
   }
-  .gate-box h2 {
-    font-family: var(--serif); font-weight: 600; font-size: 28px;
-    margin: 0 0 6px; letter-spacing: -0.01em;
-  }
-  .gate-box p { color: var(--ink-soft); font-size: 14px; margin: 0 0 20px; }
+  .gate-box h2 { font-family: var(--serif); font-weight: 600; font-size: 28px; margin: 0 0 8px; }
+  .gate-box p { color: var(--ink-soft); font-size: 14px; margin: 0 0 20px; line-height: 1.55; }
   .gate-box input {
     width: 100%; border: 1px solid var(--line); border-radius: 8px;
-    background: var(--bg); color: var(--ink); font: 16px var(--sans);
-    padding: 12px 14px; outline: 0; text-align: center; letter-spacing: .08em;
+    background: var(--bg); color: var(--ink); padding: 13px 14px; outline: 0;
+    text-align: center; font: 600 20px var(--mono); letter-spacing: .16em;
   }
   .gate-box input:focus { border-color: var(--accent); }
-  .gate-box button {
+  .gate-box button.primary {
     width: 100%; margin-top: 12px; border: 0; border-radius: 8px; cursor: pointer;
-    background: var(--accent); color: #fff; font: 600 15px/1 var(--sans);
-    padding: 13px; transition: opacity .15s;
+    background: var(--accent); color: #fff; font: 600 15px/1 var(--sans); padding: 13px;
   }
-  .gate-box button:disabled { opacity: .5; cursor: default; }
-  .gate-err { color: var(--warn); font-size: 13.5px; margin-top: 12px; min-height: 18px; }
-
-  footer {
-    margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--line);
-    font-size: 12.5px; color: var(--ink-faint); text-align: center; line-height: 1.7;
-  }
-  footer code { font-family: var(--mono); font-size: 11.5px; }
+  .gate-box button.primary:disabled { opacity: .5; cursor: default; }
+  .gate-err { color: var(--warn); font-size: 13.5px; margin-top: 12px; min-height: 18px; line-height: 1.5; }
+  .gate-foot { margin-top: 18px; font-size: 12.5px; color: var(--ink-faint); line-height: 1.6; }
 </style>
 </head>
 <body>
+
 <div id="gate" class="hidden">
   <form class="gate-box" id="gate-form">
     <h2>Vachanãmrut</h2>
-    <p>This site is password protected.</p>
-    <input type="password" id="gate-input" placeholder="Password"
-           autocomplete="current-password" aria-label="Password">
-    <button type="submit" id="gate-go">Enter</button>
+    <p id="gate-msg">Enter your voucher code to begin.</p>
+    <input id="gate-input" inputmode="numeric" autocomplete="off" maxlength="10"
+           placeholder="0000000000" aria-label="Voucher code">
+    <button type="submit" class="primary" id="gate-go">Continue</button>
     <div class="gate-err" id="gate-err"></div>
+    <div class="gate-foot">
+      Each voucher allows 10 questions and locks to this browser the first time it is used.
+      <br><button type="button" class="linkbtn" id="gate-history">Browse past questions without a voucher</button>
+    </div>
   </form>
 </div>
 
 <div class="wrap" id="app" hidden>
-  <header>
-    <h1>Vachanãmrut</h1>
-    <p class="sub">Ask the scripture. Every answer is quoted <b>verbatim</b> and cited to the paragraph.</p>
-  </header>
+  <div class="top">
+    <h1 class="brand" id="brand">Vachanãmrut</h1>
+    <div class="tabs">
+      <button class="tab on" id="tab-ask">Ask</button>
+      <button class="tab" id="tab-history">History</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="quota">
+      <span class="pill" id="quota-pill">—</span>
+      <button class="linkbtn" id="new-voucher">Use a different voucher</button>
+    </div>
+  </div>
 
-  <div class="chips" id="chips"></div>
+  <div id="view-ask">
+    <h1 class="title">Ask the scripture</h1>
+    <p class="sub">Every answer is quoted <b>verbatim</b> and cited to the paragraph.</p>
 
-  <form id="form">
-    <textarea id="q" rows="1" placeholder="e.g. How can one know whether the mind has been conquered?" autofocus></textarea>
-    <button class="go" id="go" type="submit">Ask</button>
-  </form>
+    <div class="chips" id="chips"></div>
 
-  <div id="error" class="err hidden"></div>
-  <div id="notice" class="note hidden"></div>
+    <form id="form">
+      <textarea id="q" rows="1" placeholder="e.g. How can one know whether the mind has been conquered?"></textarea>
+      <button class="go" id="go" type="submit">Ask</button>
+    </form>
 
-  <section class="card hidden" id="thinking">
-    <h2 data-toggle><span class="caret">▾</span> Reasoning <span class="count" id="think-count"></span></h2>
-    <div class="body" id="think-body"></div>
-  </section>
+    <div id="error" class="err hidden"></div>
+    <div id="notice" class="note hidden"></div>
 
-  <section class="card hidden" id="answer">
-    <h2 data-toggle><span class="caret">▾</span> Answer</h2>
-    <div class="body" id="answer-body"></div>
-  </section>
+    <section class="card hidden" id="thinking">
+      <h2 data-toggle><span class="caret">▾</span> Reasoning <span class="count" id="think-count"></span></h2>
+      <div class="reason-body" id="think-body"></div>
+    </section>
 
-  <section class="card hidden" id="verified">
-    <h2 data-toggle><span class="caret">▾</span> Quotation check <span class="count" id="v-count"></span></h2>
-    <div class="body" id="v-body"></div>
-  </section>
+    <section class="card hidden" id="answer">
+      <h2 data-toggle><span class="caret">▾</span> Answer</h2>
+      <div class="answer-body" id="answer-body"></div>
+    </section>
 
-  <section class="card collapsed hidden" id="sources">
-    <h2 data-toggle><span class="caret">▾</span> Retrieved passages <span class="count" id="s-count"></span></h2>
-    <div class="body" style="padding:0" id="s-body"></div>
-  </section>
+    <section class="card hidden" id="verified">
+      <h2 data-toggle><span class="caret">▾</span> Quotation check <span class="count" id="v-count"></span></h2>
+      <div class="body" id="v-body"></div>
+    </section>
 
-  <footer>
-    Retrieval over the 273 discourses of Bhagwãn Swãminãrãyan, English translation,
-    Swãminãrãyan Aksharpith. Reasoning by <code>deepseek-reasoner</code>, which may
-    only use the passages retrieved above. Answers are generated — check them against
-    the printed book before relying on them.
-  </footer>
+    <section class="card collapsed hidden" id="sources">
+      <h2 data-toggle><span class="caret">▾</span> Retrieved passages <span class="count" id="s-count"></span></h2>
+      <div class="srcwrap" id="s-body"></div>
+    </section>
+  </div>
+
+  <div id="view-history" hidden>
+    <h1 class="title">Past questions</h1>
+    <p class="sub">Everything asked here, newest first. Open one to see its answer,
+      citations, reasoning and the passages it was built from.</p>
+    <input class="search" id="hsearch" placeholder="Search questions and citations…" autocomplete="off">
+    <div class="hcount" id="hcount"></div>
+    <div id="hlist"></div>
+  </div>
 </div>
 
 <script>
@@ -261,117 +303,182 @@ const EXAMPLES = [
 ];
 
 const $ = id => document.getElementById(id);
-const form = $("form"), qBox = $("q"), goBtn = $("go");
+const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c]));
+const slug = c => "src-" + String(c).replace(/[^A-Za-z0-9]+/g, "-").toLowerCase();
 
-/* ---- password gate ------------------------------------------------------
-   The static page is served by the CDN and cannot be gated, so the gate sits
-   on the API: /api/login validates, and every /api/ask carries the password.
-   The password is held in sessionStorage, so it survives a reload but not a
-   closed tab. If APP_PASSWORD is unset server-side the gate is skipped.      */
-const PW_KEY = "vachanamrut_pw";
-let PW = "";
-try { PW = sessionStorage.getItem(PW_KEY) || ""; } catch { PW = ""; }
-
-async function tryPassword(password) {
-  const res = await fetch("/api/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password }),
-  });
-  if (!res.ok) return false;
-  const data = await res.json();
-  return data.ok === true;
-}
-
-function openApp() {
-  $("gate").classList.add("hidden");
-  $("app").hidden = false;
-  qBox.focus();
-}
-
-function lockApp(message) {
-  $("app").hidden = true;
-  $("gate").classList.remove("hidden");
-  $("gate-err").textContent = message || "";
-  $("gate-input").focus();
-}
-
-$("gate-form").addEventListener("submit", async e => {
-  e.preventDefault();
-  const btn = $("gate-go"), value = $("gate-input").value;
-  btn.disabled = true; $("gate-err").textContent = "";
-  try {
-    if (await tryPassword(value)) {
-      PW = value;
-      try { sessionStorage.setItem(PW_KEY, PW); } catch {}
-      openApp();
-    } else {
-      $("gate-err").textContent = "Wrong password.";
-      $("gate-input").select();
-    }
-  } catch {
-    $("gate-err").textContent = "Could not reach the server.";
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-// An empty password is accepted when the server has no APP_PASSWORD set, which
-// is how the gate stays out of the way locally.
-(async () => {
-  try {
-    if (await tryPassword(PW)) openApp(); else lockApp();
-  } catch {
-    lockApp("Could not reach the server.");
-  }
-})();
-
-// Sections that can be cited, for highlighting references inside the answer.
 const CITE = new RegExp(
   "\\b((?:Gadhad[\u00e3a]\\s*I{1,3}|S[\u00e3a]rangpur|K[\u00e3a]riy[\u00e3a]ni|Loy[\u00e3a]|" +
   "Panch[\u00e3a]l[\u00e3a]|Vart[\u00e3a]l|Amd[\u00e3a]v[\u00e3a]d|Ashl[\u00e3a]li|Jetalpur|" +
   "Bhugol-Khagol)\\s*-\\s*\\d{1,3}(?:\\.\\d{1,3})?)", "g");
 
-const esc = s => s.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
-const slug = c => "src-" + c.replace(/[^A-Za-z0-9]+/g, "-").toLowerCase();
-
 function render(text) {
   let h = esc(text);
   h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  h = h.replace(/^&gt;\s?/gm, "");
   h = h.replace(/[\u201c]([^\u201c\u201d]+)[\u201d]/g, '<span class="quote">\u201c$1\u201d</span>');
-  h = h.replace(CITE, m => `<a class="cite" href="#${slug(m)}">${m}</a>`);
+  h = h.replace(CITE, m => `<span class="cite">${m}</span>`);
   return h.split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, "<br>")}</p>`).join("");
 }
 
-document.querySelectorAll("[data-toggle]").forEach(h =>
-  h.addEventListener("click", () => h.parentElement.classList.toggle("collapsed")));
+const when = ts => {
+  const age = Date.now() / 1000 - ts;
+  if (age < 3600) return Math.max(1, Math.round(age / 60)) + "m ago";
+  if (age < 86400) return Math.round(age / 3600) + "h ago";
+  if (age < 604800) return Math.round(age / 86400) + "d ago";
+  return new Date(ts * 1000).toLocaleDateString(undefined,
+    { day: "numeric", month: "short", year: "numeric" });
+};
 
-const chips = $("chips");
+/* ---------- local identity -------------------------------------------------
+   The device id is what makes a voucher un-shareable: the server binds a code
+   to the first device that spends from it. It is a random value carrying
+   nothing personal, and it never leaves this browser except as that opaque id. */
+const LS = { device: "vach_device", voucher: "vach_voucher" };
+const readLS = k => { try { return localStorage.getItem(k) || ""; } catch { return ""; } };
+const writeLS = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+
+function deviceId() {
+  let id = readLS(LS.device);
+  if (!id) {
+    id = (crypto.randomUUID ? crypto.randomUUID()
+          : String(Math.random()).slice(2) + Date.now()).replace(/-/g, "").slice(0, 32);
+    writeLS(LS.device, id);
+  }
+  return id;
+}
+const DEVICE = deviceId();
+let VOUCHER = readLS(LS.voucher);
+
+/* ---------- voucher --------------------------------------------------------- */
+async function checkVoucher(code, claim) {
+  const res = await fetch("/api/voucher", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code, device: DEVICE, claim: !!claim }),
+  });
+  return { status: res.status, data: await res.json().catch(() => ({})) };
+}
+
+const GATE_REASONS = {
+  invalid: "That code is not recognised. Check the digits and try again.",
+  bound_elsewhere: "That voucher is already in use on another browser. "
+                 + "Each voucher works on one device only.",
+  spent: "That voucher has used all of its questions. Enter a new one to continue.",
+  no_device: "This browser is blocking local storage, which the voucher needs.",
+};
+
+function setQuota(remaining, unlimited) {
+  const pill = $("quota-pill");
+  if (unlimited) { pill.textContent = "unlimited"; pill.classList.remove("low"); return; }
+  const n = remaining ?? 0;
+  pill.textContent = n + (n === 1 ? " question left" : " questions left");
+  pill.classList.toggle("low", n <= 2);
+}
+
+function showGate(message) {
+  $("app").hidden = true;
+  $("gate").classList.remove("hidden");
+  $("gate-err").textContent = message || "";
+  $("gate-input").value = "";
+  $("gate-input").focus();
+}
+
+const openApp = () => { $("gate").classList.add("hidden"); $("app").hidden = false; };
+
+$("gate-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const code = $("gate-input").value.replace(/\D/g, "");
+  const btn = $("gate-go");
+  if (code.length !== 10) { $("gate-err").textContent = "A voucher is 10 digits."; return; }
+  btn.disabled = true; $("gate-err").textContent = "";
+  try {
+    const { data } = await checkVoucher(code, true);
+    if (data.ok) {
+      VOUCHER = code; writeLS(LS.voucher, code);
+      setQuota(data.remaining, data.unlimited);
+      openApp(); showView("ask");
+    } else {
+      $("gate-err").textContent = GATE_REASONS[data.reason] || "That voucher cannot be used.";
+    }
+  } catch {
+    $("gate-err").textContent = "Could not reach the server. Try again.";
+  } finally { btn.disabled = false; }
+});
+
+$("gate-input").addEventListener("input", e => {
+  e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
+});
+
+$("new-voucher").addEventListener("click", () => {
+  $("gate-msg").textContent = "Enter another voucher code.";
+  showGate("");
+});
+
+$("gate-history").addEventListener("click", () => { openApp(); showView("history"); });
+
+/* ---------- views ----------------------------------------------------------- */
+function showView(name) {
+  const ask = name === "ask";
+  $("view-ask").hidden = !ask;
+  $("view-history").hidden = ask;
+  $("tab-ask").classList.toggle("on", ask);
+  $("tab-history").classList.toggle("on", !ask);
+  if (!ask) loadHistory();
+}
+$("tab-ask").onclick = () => showView("ask");
+$("tab-history").onclick = () => showView("history");
+$("brand").onclick = () => showView("ask");
+
+const wireToggles = root =>
+  root.querySelectorAll("[data-toggle]").forEach(h =>
+    h.addEventListener("click", () => h.parentElement.classList.toggle("collapsed")));
+wireToggles(document);
+
 EXAMPLES.forEach(text => {
   const b = document.createElement("button");
   b.type = "button"; b.className = "chip"; b.textContent = text;
-  b.onclick = () => { qBox.value = text; form.requestSubmit(); };
-  chips.appendChild(b);
+  b.onclick = () => { $("q").value = text; $("form").requestSubmit(); };
+  $("chips").appendChild(b);
 });
 
-qBox.addEventListener("input", () => {
-  qBox.style.height = "auto";
-  qBox.style.height = Math.min(qBox.scrollHeight, 200) + "px";
+$("q").addEventListener("input", e => {
+  e.target.style.height = "auto";
+  e.target.style.height = Math.min(e.target.scrollHeight, 200) + "px";
 });
-qBox.addEventListener("keydown", e => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+$("q").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").requestSubmit(); }
 });
 
+/* ---------- shared rendering ------------------------------------------------ */
+const sourcesHTML = sources => (sources || []).map(s => `
+  <div class="src" id="${slug(s.citation)}">
+    <div class="src-head">
+      <span class="src-cite">${esc(s.citation)}</span>
+      <span class="src-title">${esc(s.title || "")}</span>
+      ${s.matched_by ? `<span class="tag">${esc(s.matched_by)}</span>` : ""}
+    </div>
+    <p class="src-text">${esc(s.text)}</p>
+  </div>`).join("");
+
+const verifiedHTML = quotes => (quotes || []).map(q => `
+  <div class="vq">
+    <span class="badge ${q.verbatim ? "ok" : "no"}">${
+      q.verbatim ? (q.elided ? "verbatim (elided)" : "verbatim") : "not found"}</span>
+    <div>
+      <div class="vq-text">\u201c${esc(q.quote)}\u201d</div>
+      ${q.citation ? `<span class="src-cite">${esc(q.citation)}</span>` : ""}
+    </div>
+  </div>`).join("");
+
+/* ---------- ask ------------------------------------------------------------- */
 let busy = false;
 
-form.addEventListener("submit", async e => {
+$("form").addEventListener("submit", async e => {
   e.preventDefault();
-  const question = qBox.value.trim();
+  const question = $("q").value.trim();
   if (!question || busy) return;
-  busy = true; goBtn.disabled = true; goBtn.textContent = "Asking…";
+  busy = true; $("go").disabled = true; $("go").textContent = "Asking…";
 
-  $("error").classList.add("hidden");
-  $("notice").classList.add("hidden");
+  $("error").classList.add("hidden"); $("notice").classList.add("hidden");
   for (const id of ["thinking", "answer", "verified", "sources"]) $(id).classList.add("hidden");
   $("think-body").textContent = ""; $("answer-body").innerHTML = "";
   $("v-body").innerHTML = ""; $("s-body").innerHTML = "";
@@ -379,72 +486,58 @@ form.addEventListener("submit", async e => {
   $("sources").classList.add("collapsed");
 
   let reasoning = "", answer = "";
-
-  const fail = msg => {
-    $("error").textContent = msg;
-    $("error").classList.remove("hidden");
-  };
+  const fail = m => { $("error").textContent = m; $("error").classList.remove("hidden"); };
 
   try {
     const res = await fetch("/api/ask", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-App-Password": PW },
-      body: JSON.stringify({ question }),
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, voucher: VOUCHER, device: DEVICE }),
     });
-    if (res.status === 401) {
-      try { sessionStorage.removeItem(PW_KEY); } catch {}
-      PW = "";
-      lockApp("Session expired — enter the password again.");
+
+    if (res.status === 402) {
+      const data = await res.json().catch(() => ({}));
+      if (data.reason === "spent") { VOUCHER = ""; writeLS(LS.voucher, ""); setQuota(0); }
+      $("gate-msg").textContent = data.reason === "spent"
+        ? "This voucher is finished. Enter a new one to keep going."
+        : "Enter your voucher code to begin.";
+      showGate(GATE_REASONS[data.reason] || "This voucher can no longer be used.");
       return;
     }
     if (!res.ok || !res.body) throw new Error("Server returned " + res.status);
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
+    const left = res.headers.get("X-Voucher-Remaining");
+    if (left && left !== "None") setQuota(parseInt(left, 10));
 
+    const reader = res.body.getReader(), decoder = new TextDecoder();
+    let buffer = "";
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      const parts = buffer.split("\n\n");
-      buffer = parts.pop();
+      const parts = buffer.split("\n\n"); buffer = parts.pop();
       for (const part of parts) {
         const line = part.split("\n").find(l => l.startsWith("data:"));
         if (!line) continue;
         let ev; try { ev = JSON.parse(line.slice(5)); } catch { continue; }
 
-        if (ev.type === "error") { fail(ev.message); }
+        if (ev.type === "error") fail(ev.message);
 
         if (ev.type === "notice") {
           $("notice").textContent = ev.message;
           $("notice").classList.remove("hidden");
         }
 
-        if (ev.type === "done" && !answer) {
-          fail("The model returned reasoning but no answer. Try rephrasing, "
-             + "or ask a more specific question.");
-        }
-
         if (ev.type === "sources") {
           $("s-count").textContent = ev.sources.length;
           $("sources").classList.remove("hidden");
-          $("s-body").innerHTML = ev.sources.map(s => `
-            <div class="src" id="${slug(s.citation)}">
-              <div class="src-head">
-                <span class="src-cite">${esc(s.citation)}</span>
-                <span class="src-title">${esc(s.title || "")}</span>
-                <span class="tag">${esc(s.matched_by || "")}</span>
-              </div>
-              <p class="src-text">${esc(s.text)}</p>
-            </div>`).join("");
+          $("s-body").innerHTML = sourcesHTML(ev.sources);
         }
 
         if (ev.type === "reasoning") {
           reasoning += ev.text;
           $("thinking").classList.remove("hidden");
           $("think-body").textContent = reasoning;
-          $("think-count").textContent = reasoning.length + " chars";
+          $("think-count").textContent = reasoning.length.toLocaleString() + " chars";
           $("think-body").scrollTop = $("think-body").scrollHeight;
         }
 
@@ -452,34 +545,153 @@ form.addEventListener("submit", async e => {
           if (!answer) $("thinking").classList.add("collapsed");
           answer += ev.text;
           $("answer").classList.remove("hidden");
-          $("answer-body").innerHTML = render(answer) +
-            '<span class="dots"></span>';
+          $("answer-body").innerHTML = render(answer) + '<span class="dots"></span>';
         }
 
         if (ev.type === "verified" && ev.quotes.length) {
           $("verified").classList.remove("hidden");
           const good = ev.quotes.filter(q => q.verbatim).length;
           $("v-count").textContent = `${good}/${ev.quotes.length} verbatim`;
-          $("v-body").innerHTML = ev.quotes.map(q => `
-            <div class="vq">
-              <span class="badge ${q.verbatim ? "ok" : "no"}">${
-                q.verbatim ? (q.elided ? "verbatim (elided)" : "verbatim")
-                           : "not found"}</span>
-              <div>
-                <div class="vq-text">\u201c${esc(q.quote)}\u201d</div>
-                ${q.citation ? `<span class="src-cite">${esc(q.citation)}</span>` : ""}
-              </div>
-            </div>`).join("");
+          $("v-body").innerHTML = verifiedHTML(ev.quotes);
+        }
+
+        if (ev.type === "done" && !answer) {
+          fail("The model returned reasoning but no answer. Try rephrasing, "
+             + "or ask a more specific question.");
         }
       }
     }
-    if (answer) $("answer-body").innerHTML = render(answer);
+    if (answer) { $("answer-body").innerHTML = render(answer); historyCache = null; }
   } catch (err) {
     fail("Could not reach the server: " + err.message);
   } finally {
-    busy = false; goBtn.disabled = false; goBtn.textContent = "Ask";
+    busy = false; $("go").disabled = false; $("go").textContent = "Ask";
   }
 });
+
+/* ---------- history --------------------------------------------------------- */
+let historyCache = null;
+
+async function loadHistory() {
+  const list = $("hlist");
+  if (!historyCache) {
+    list.innerHTML = '<div class="spin">Loading…</div>';
+    try {
+      const res = await fetch("/api/history?limit=300");
+      historyCache = (await res.json()).entries || [];
+    } catch {
+      list.innerHTML = '<div class="hempty">Could not load the history.</div>';
+      return;
+    }
+  }
+  drawHistory();
+}
+
+function drawHistory() {
+  const q = $("hsearch").value.trim().toLowerCase();
+  const all = historyCache || [];
+  const rows = q
+    ? all.filter(e => (e.question || "").toLowerCase().includes(q)
+                   || (e.citations || []).some(c => c.toLowerCase().includes(q)))
+    : all;
+
+  $("hcount").textContent = !all.length ? ""
+    : q ? `${rows.length} of ${all.length} questions`
+        : `${all.length} question${all.length === 1 ? "" : "s"} asked`;
+
+  if (!rows.length) {
+    $("hlist").innerHTML = `<div class="hempty">${
+      all.length ? "Nothing matches that search."
+                 : "No questions have been asked yet."}</div>`;
+    return;
+  }
+
+  $("hlist").innerHTML = rows.map(e => `
+    <div class="hitem" data-id="${esc(e.id)}">
+      <div class="hhead">
+        <div class="hq">${esc(e.question)}
+          <div class="hmeta">
+            ${(e.citations || []).slice(0, 4).map(c => `<span class="cite">${esc(c)}</span>`).join("")}
+            ${e.quote_count ? `<span class="badge ${
+              e.verified_count === e.quote_count ? "ok" : "no"}">${
+              e.verified_count}/${e.quote_count} verbatim</span>` : ""}
+          </div>
+        </div>
+        <span class="hdate">${when(e.ts)}</span>
+      </div>
+      <div class="hdetail hidden"></div>
+    </div>`).join("");
+
+  $("hlist").querySelectorAll(".hitem").forEach(item =>
+    item.querySelector(".hhead").addEventListener("click", () => toggleEntry(item)));
+}
+
+async function toggleEntry(item) {
+  const detail = item.querySelector(".hdetail");
+  if (!detail.classList.contains("hidden")) { detail.classList.add("hidden"); return; }
+  detail.classList.remove("hidden");
+  if (detail.dataset.loaded) return;
+
+  detail.innerHTML = '<div class="spin">Loading…</div>';
+  try {
+    const res = await fetch("/api/entry?id=" + encodeURIComponent(item.dataset.id));
+    if (!res.ok) throw new Error("not found");
+    const e = await res.json();
+    detail.innerHTML = `
+      <section class="card">
+        <h2 data-toggle><span class="caret">▾</span> Answer</h2>
+        <div class="answer-body">${render(e.answer || "")}</div>
+      </section>
+      ${(e.verified || []).length ? `
+      <section class="card">
+        <h2 data-toggle><span class="caret">▾</span> Quotation check
+          <span class="count">${e.verified.filter(v => v.verbatim).length}/${e.verified.length} verbatim</span></h2>
+        <div class="body">${verifiedHTML(e.verified)}</div>
+      </section>` : ""}
+      ${e.reasoning ? `
+      <section class="card collapsed">
+        <h2 data-toggle><span class="caret">▾</span> Reasoning
+          <span class="count">${e.reasoning.length.toLocaleString()} chars${
+            e.reasoning_truncated ? ", truncated" : ""}</span></h2>
+        <div class="reason-body">${esc(e.reasoning)}</div>
+      </section>` : ""}
+      <section class="card collapsed">
+        <h2 data-toggle><span class="caret">▾</span> Retrieved passages
+          <span class="count">${(e.sources || []).length}</span></h2>
+        <div class="srcwrap">${sourcesHTML(e.sources)}</div>
+      </section>`;
+    detail.dataset.loaded = "1";
+    wireToggles(detail);
+  } catch {
+    detail.innerHTML = '<div class="hempty">That entry could not be loaded.</div>';
+  }
+}
+
+let searchTimer;
+$("hsearch").addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(drawHistory, 120);
+});
+
+/* ---------- start ----------------------------------------------------------- */
+(async () => {
+  try {
+    const { data } = await checkVoucher(VOUCHER, false);
+    if (data.enabled === false) {          // vouchers not configured: open access
+      setQuota(null, true); openApp(); showView("ask"); return;
+    }
+    if (VOUCHER && data.ok) {
+      setQuota(data.remaining, data.unlimited); openApp(); showView("ask"); return;
+    }
+    if (VOUCHER && data.reason === "spent") {
+      $("gate-msg").textContent = "This voucher is finished. Enter a new one to keep going.";
+      showGate(GATE_REASONS.spent); return;
+    }
+    showGate("");
+  } catch {
+    showGate("Could not reach the server.");
+  }
+})();
 </script>
 </body>
 </html>
