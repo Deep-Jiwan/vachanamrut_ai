@@ -252,18 +252,14 @@ async def stream_answer(ask: Ask) -> AsyncIterator[str]:
     yield sse({"type": "done", "usage": usage})
 
 
-@app.post("/api/login")
-@app.post("/login")
 async def login(body: Login):
     if not password_ok(body.password):
         return JSONResponse({"ok": False, "error": "Wrong password."}, status_code=401)
     return {"ok": True, "required": bool(APP_PASSWORD)}
 
 
-@app.post("/api/ask")
-@app.post("/ask")
-async def ask(body: Ask, x_app_password: str | None = Header(default=None)):
-    if not password_ok(x_app_password):
+async def ask(body: Ask, supplied_password: str | None):
+    if not password_ok(supplied_password):
         return JSONResponse({"ok": False, "error": "Password required."}, status_code=401)
     return StreamingResponse(
         stream_answer(body),
@@ -273,8 +269,6 @@ async def ask(body: Ask, x_app_password: str | None = Header(default=None)):
     )
 
 
-@app.get("/api/health")
-@app.get("/health")
 async def health():
     """Reports enough to tell a bundling fault from a configuration one."""
     info: dict = {
@@ -303,19 +297,46 @@ async def health():
         return JSONResponse(info, status_code=500)
 
 
-@app.api_route("/{full_path:path}", methods=["GET", "POST"])
-async def catchall(request: Request, full_path: str):
-    """Reports the path the app actually received.
+def resolve_action(request: Request, rest: str) -> str:
+    """Work out which endpoint was asked for.
 
-    A rewrite can hand the function a path other than the one the browser asked
-    for, which looks exactly like a 404 from the outside. Naming the received
-    path turns that into something readable.
+    Vercel's rewrite replaces the path the function sees: every /api/* request
+    arrives as /api/index, so the path alone cannot say whether this is an ask,
+    a login or a health check. The rewrite therefore carries the original
+    segment in ?action=, and that wins when present. Falling back to the last
+    path segment keeps the same code serving plain /api/ask locally, where
+    there is no rewrite.
     """
+    return (request.query_params.get("action") or rest.strip("/").rsplit("/", 1)[-1]).lower()
+
+
+@app.api_route("/api/{rest:path}", methods=["GET", "POST"])
+async def dispatch(request: Request, rest: str):
+    action = resolve_action(request, rest)
+
+    if action == "health":
+        return await health()
+
+    if action == "login":
+        try:
+            body = Login(**(await request.json()))
+        except Exception:
+            body = Login(password="")
+        return await login(body)
+
+    if action == "ask":
+        try:
+            body = Ask(**(await request.json()))
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": f"Bad request: {exc}"},
+                                status_code=422)
+        return await ask(body, request.headers.get("x-app-password"))
+
     return JSONResponse({
-        "error": "No route matched.",
+        "error": "No such endpoint.",
+        "action": action,
         "received_path": request.url.path,
-        "method": request.method,
-        "routes": sorted({r.path for r in app.routes if hasattr(r, "path")}),
+        "available": ["ask", "login", "health"],
     }, status_code=404)
 
 
