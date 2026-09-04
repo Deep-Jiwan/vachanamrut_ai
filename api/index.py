@@ -1,49 +1,72 @@
 """Web API: retrieval-grounded answers over the Vachanamrut, streamed from DeepSeek.
 
 The web app is the same idea as the MCP server, aimed at a browser instead of a
-model client: retrieve verbatim paragraphs first, hand them to the model as the
-only permitted source, and stream the reasoning so a reader can watch the answer
-being built out of the text rather than trust it blindly.
+model client: retrieve verbatim paragraphs first, hand them to the model as its
+only permitted source, and stream the reasoning so a reader watches the answer
+being built out of the text rather than trusting it blindly.
 
 Every quotation the model produces is checked back against the corpus afterwards
 by `verify_quote`, so a paraphrase presented as scripture surfaces in the UI as
 unverified rather than passing as a citation.
+
+The corpus import is deliberately not allowed to fail at module scope. On a
+serverless host a raised ImportError becomes an opaque FUNCTION_INVOCATION_FAILED
+with no way to tell a bundling mistake from a code bug, so the error is captured
+and reported by /api/health instead.
 """
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import re
 import sys
+import traceback
 from pathlib import Path
 from typing import AsyncIterator
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT / "src") not in sys.path:
-    sys.path.insert(0, str(ROOT / "src"))
+for candidate in (ROOT / "src", ROOT):
+    if str(candidate) not in sys.path:
+        sys.path.insert(0, str(candidate))
 
-from vachanamrut_rag.retrieve import Retriever  # noqa: E402
+Retriever = None
+IMPORT_ERROR: str | None = None
+try:
+    from vachanamrut_rag.retrieve import Retriever  # type: ignore[no-redef]
+except Exception:                                   # bundling or dependency fault
+    IMPORT_ERROR = traceback.format_exc()
 
 CORPUS_DIR = os.environ.get("VACHANAMRUT_CORPUS", str(ROOT / "data" / "corpus"))
 DEEPSEEK_URL = os.environ.get(
     "DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/") + "/chat/completions"
 MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-reasoner")
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 
 # Retrieval is cheap (3ms) but building the index costs ~0.5s, so it is built
 # once per warm container and reused.
-_retriever: Retriever | None = None
+_retriever = None
 
 
-def retriever() -> Retriever:
+def retriever():
     global _retriever
     if _retriever is None:
+        if Retriever is None:
+            raise RuntimeError("corpus package failed to import; see /api/health")
         _retriever = Retriever.load(CORPUS_DIR)
     return _retriever
+
+
+def password_ok(supplied: str | None) -> bool:
+    """Constant-time check. An unset APP_PASSWORD leaves the app open."""
+    if not APP_PASSWORD:
+        return True
+    return bool(supplied) and hmac.compare_digest(supplied, APP_PASSWORD)
 
 
 SYSTEM_PROMPT = """You answer questions about the Vachanamrut: 273 discourses of
@@ -93,7 +116,6 @@ def build_context(results: list) -> str:
 # mind") appear everywhere and would make the check meaningless.
 _QUOTED = re.compile("[“\"]([^“”\"]{25,})[”\"]")
 
-
 # A quotation may legitimately elide its middle ("... and so on"). Each side of
 # an elision is checked separately, and the quote counts as verbatim only if
 # every segment is found in the same paragraph.
@@ -132,6 +154,10 @@ class Ask(BaseModel):
     question: str = Field(min_length=2, max_length=2000)
     limit: int = Field(default=8, ge=1, le=20)
     section: str | None = None
+
+
+class Login(BaseModel):
+    password: str = Field(default="", max_length=200)
 
 
 def sse(event: dict) -> str:
@@ -226,9 +252,19 @@ async def stream_answer(ask: Ask) -> AsyncIterator[str]:
     yield sse({"type": "done", "usage": usage})
 
 
+@app.post("/api/login")
+@app.post("/login")
+async def login(body: Login):
+    if not password_ok(body.password):
+        return JSONResponse({"ok": False, "error": "Wrong password."}, status_code=401)
+    return {"ok": True, "required": bool(APP_PASSWORD)}
+
+
 @app.post("/api/ask")
 @app.post("/ask")
-async def ask(body: Ask):
+async def ask(body: Ask, x_app_password: str | None = Header(default=None)):
+    if not password_ok(x_app_password):
+        return JSONResponse({"ok": False, "error": "Password required."}, status_code=401)
     return StreamingResponse(
         stream_answer(body),
         media_type="text/event-stream",
@@ -240,20 +276,35 @@ async def ask(body: Ask):
 @app.get("/api/health")
 @app.get("/health")
 async def health():
+    """Reports enough to tell a bundling fault from a configuration one."""
+    info: dict = {
+        "import_ok": Retriever is not None,
+        "password_required": bool(APP_PASSWORD),
+        "key_configured": bool(os.environ.get("DEEPSEEK_API_KEY")),
+        "model": MODEL,
+        "root": str(ROOT),
+        "corpus_dir": CORPUS_DIR,
+        "corpus_dir_exists": Path(CORPUS_DIR).is_dir(),
+        "root_entries": sorted(p.name for p in ROOT.iterdir())[:40]
+        if ROOT.is_dir() else [],
+    }
+    if IMPORT_ERROR:
+        info["ok"] = False
+        info["import_error"] = IMPORT_ERROR.strip().splitlines()[-6:]
+        return JSONResponse(info, status_code=500)
     try:
         r = retriever()
-        return {"ok": True,
-                "chunks": len(r.corpus.chunks),
-                "discourses": len(r.corpus.discourses),
-                "model": MODEL,
-                "key_configured": bool(os.environ.get("DEEPSEEK_API_KEY"))}
-    except Exception as exc:
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+        info |= {"ok": True, "chunks": len(r.corpus.chunks),
+                 "discourses": len(r.corpus.discourses)}
+        return info
+    except Exception:
+        info["ok"] = False
+        info["load_error"] = traceback.format_exc().strip().splitlines()[-6:]
+        return JSONResponse(info, status_code=500)
 
 
 # Local development only. On Vercel the static files are served by the CDN and
-# never reach this function, so `public/` is absent from the bundle and this
-# mount is skipped.
+# never reach this function.
 _PUBLIC = ROOT / "public"
 if _PUBLIC.is_dir():
     from fastapi.staticfiles import StaticFiles

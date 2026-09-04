@@ -154,6 +154,35 @@
   @keyframes blink { 50% { opacity: 0; } }
   .hidden { display: none !important; }
 
+  /* Password gate */
+  #gate {
+    position: fixed; inset: 0; background: var(--bg); z-index: 50;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .gate-box {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 32px; width: 100%; max-width: 380px;
+    text-align: center;
+  }
+  .gate-box h2 {
+    font-family: var(--serif); font-weight: 600; font-size: 28px;
+    margin: 0 0 6px; letter-spacing: -0.01em;
+  }
+  .gate-box p { color: var(--ink-soft); font-size: 14px; margin: 0 0 20px; }
+  .gate-box input {
+    width: 100%; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--ink); font: 16px var(--sans);
+    padding: 12px 14px; outline: 0; text-align: center; letter-spacing: .08em;
+  }
+  .gate-box input:focus { border-color: var(--accent); }
+  .gate-box button {
+    width: 100%; margin-top: 12px; border: 0; border-radius: 8px; cursor: pointer;
+    background: var(--accent); color: #fff; font: 600 15px/1 var(--sans);
+    padding: 13px; transition: opacity .15s;
+  }
+  .gate-box button:disabled { opacity: .5; cursor: default; }
+  .gate-err { color: var(--warn); font-size: 13.5px; margin-top: 12px; min-height: 18px; }
+
   footer {
     margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--line);
     font-size: 12.5px; color: var(--ink-faint); text-align: center; line-height: 1.7;
@@ -162,7 +191,18 @@
 </style>
 </head>
 <body>
-<div class="wrap">
+<div id="gate" class="hidden">
+  <form class="gate-box" id="gate-form">
+    <h2>Vachanãmrut</h2>
+    <p>This site is password protected.</p>
+    <input type="password" id="gate-input" placeholder="Password"
+           autocomplete="current-password" aria-label="Password">
+    <button type="submit" id="gate-go">Enter</button>
+    <div class="gate-err" id="gate-err"></div>
+  </form>
+</div>
+
+<div class="wrap" id="app" hidden>
   <header>
     <h1>Vachanãmrut</h1>
     <p class="sub">Ask the scripture. Every answer is quoted <b>verbatim</b> and cited to the paragraph.</p>
@@ -216,6 +256,69 @@ const EXAMPLES = [
 
 const $ = id => document.getElementById(id);
 const form = $("form"), qBox = $("q"), goBtn = $("go");
+
+/* ---- password gate ------------------------------------------------------
+   The static page is served by the CDN and cannot be gated, so the gate sits
+   on the API: /api/login validates, and every /api/ask carries the password.
+   The password is held in sessionStorage, so it survives a reload but not a
+   closed tab. If APP_PASSWORD is unset server-side the gate is skipped.      */
+const PW_KEY = "vachanamrut_pw";
+let PW = "";
+try { PW = sessionStorage.getItem(PW_KEY) || ""; } catch { PW = ""; }
+
+async function tryPassword(password) {
+  const res = await fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) return false;
+  const data = await res.json();
+  return data.ok === true;
+}
+
+function openApp() {
+  $("gate").classList.add("hidden");
+  $("app").hidden = false;
+  qBox.focus();
+}
+
+function lockApp(message) {
+  $("app").hidden = true;
+  $("gate").classList.remove("hidden");
+  $("gate-err").textContent = message || "";
+  $("gate-input").focus();
+}
+
+$("gate-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const btn = $("gate-go"), value = $("gate-input").value;
+  btn.disabled = true; $("gate-err").textContent = "";
+  try {
+    if (await tryPassword(value)) {
+      PW = value;
+      try { sessionStorage.setItem(PW_KEY, PW); } catch {}
+      openApp();
+    } else {
+      $("gate-err").textContent = "Wrong password.";
+      $("gate-input").select();
+    }
+  } catch {
+    $("gate-err").textContent = "Could not reach the server.";
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// An empty password is accepted when the server has no APP_PASSWORD set, which
+// is how the gate stays out of the way locally.
+(async () => {
+  try {
+    if (await tryPassword(PW)) openApp(); else lockApp();
+  } catch {
+    lockApp("Could not reach the server.");
+  }
+})();
 
 // Sections that can be cited, for highlighting references inside the answer.
 const CITE = new RegExp(
@@ -278,9 +381,15 @@ form.addEventListener("submit", async e => {
   try {
     const res = await fetch("/api/ask", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-App-Password": PW },
       body: JSON.stringify({ question }),
     });
+    if (res.status === 401) {
+      try { sessionStorage.removeItem(PW_KEY); } catch {}
+      PW = "";
+      lockApp("Session expired — enter the password again.");
+      return;
+    }
     if (!res.ok || !res.body) throw new Error("Server returned " + res.status);
 
     const reader = res.body.getReader();
