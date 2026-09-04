@@ -148,6 +148,11 @@
     background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn);
     border-radius: var(--radius); padding: 14px 18px; margin-top: 18px; font-size: 15px;
   }
+  .note {
+    background: var(--accent-soft); color: var(--accent);
+    border: 1px solid var(--accent); border-radius: var(--radius);
+    padding: 11px 16px; margin-top: 18px; font-size: 13.5px;
+  }
   .dots::after {
     content: "▊"; animation: blink 1s steps(2) infinite; color: var(--accent);
   }
@@ -216,6 +221,7 @@
   </form>
 
   <div id="error" class="err hidden"></div>
+  <div id="notice" class="note hidden"></div>
 
   <section class="card hidden" id="thinking">
     <h2 data-toggle><span class="caret">▾</span> Reasoning <span class="count" id="think-count"></span></h2>
@@ -365,6 +371,7 @@ form.addEventListener("submit", async e => {
   busy = true; goBtn.disabled = true; goBtn.textContent = "Asking…";
 
   $("error").classList.add("hidden");
+  $("notice").classList.add("hidden");
   for (const id of ["thinking", "answer", "verified", "sources"]) $(id).classList.add("hidden");
   $("think-body").textContent = ""; $("answer-body").innerHTML = "";
   $("v-body").innerHTML = ""; $("s-body").innerHTML = "";
@@ -408,6 +415,16 @@ form.addEventListener("submit", async e => {
         let ev; try { ev = JSON.parse(line.slice(5)); } catch { continue; }
 
         if (ev.type === "error") { fail(ev.message); }
+
+        if (ev.type === "notice") {
+          $("notice").textContent = ev.message;
+          $("notice").classList.remove("hidden");
+        }
+
+        if (ev.type === "done" && !answer) {
+          fail("The model returned reasoning but no answer. Try rephrasing, "
+             + "or ask a more specific question.");
+        }
 
         if (ev.type === "sources") {
           $("s-count").textContent = ev.sources.length;

@@ -21,6 +21,7 @@ import json
 import os
 import re
 import sys
+import time
 import traceback
 from pathlib import Path
 from typing import AsyncIterator
@@ -47,6 +48,21 @@ DEEPSEEK_URL = os.environ.get(
     "DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/") + "/chat/completions"
 MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-reasoner")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+
+# The reasoning model's latency is variable and not a clean function of prompt
+# size: measured on one question, first answer token arrived at 10.9s with four
+# passages, 45.3s with five and 22.6s with six. Since the host kills the
+# function at a fixed ceiling, a slow run streams its whole reasoning and then
+# dies before saying anything -- the reader watches it think and gets no answer.
+# So the reasoning model gets a budget, and if it has not begun answering by
+# then the same passages go to the fast model, which answers in a few seconds.
+FALLBACK_MODEL = os.environ.get("DEEPSEEK_FALLBACK_MODEL", "deepseek-chat")
+ANSWER_DEADLINE = float(os.environ.get("ANSWER_DEADLINE_S", "38"))
+
+# Eight passages with their neighbours made a ~10.7k-character prompt that the
+# model deliberated over exhaustively. Five keeps the neighbouring paragraphs,
+# which an answer usually needs to make sense, at a third of the reasoning cost.
+DEFAULT_LIMIT = 5
 
 # Retrieval is cheap (3ms) but building the index costs ~0.5s, so it is built
 # once per warm container and reused.
@@ -152,7 +168,7 @@ app = FastAPI(title="Vachanamrut", docs_url=None, redoc_url=None)
 
 class Ask(BaseModel):
     question: str = Field(min_length=2, max_length=2000)
-    limit: int = Field(default=8, ge=1, le=20)
+    limit: int = Field(default=DEFAULT_LIMIT, ge=1, le=20)
     section: str | None = None
 
 
@@ -196,59 +212,87 @@ async def stream_answer(ask: Ask) -> AsyncIterator[str]:
         yield sse({"type": "done"})
         return
 
-    payload = {
-        "model": MODEL,
-        "stream": True,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content":
-                "Passages retrieved from the Vachanamrut:\n\n"
-                f"{build_context(results)}\n\n---\n\nQuestion: {ask.question}"},
-        ],
-    }
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content":
+            "Passages retrieved from the Vachanamrut:\n\n"
+            f"{build_context(results)}\n\n---\n\nQuestion: {ask.question}"},
+    ]
 
     answer_parts: list[str] = []
-    usage: dict | None = None
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=15.0)) as client:
-            async with client.stream(
-                "POST", DEEPSEEK_URL,
-                headers={"Authorization": f"Bearer {key}",
-                         "Content-Type": "application/json"},
-                json=payload,
-            ) as response:
-                if response.status_code != 200:
-                    detail = (await response.aread()).decode("utf-8", "replace")[:400]
-                    yield sse({"type": "error",
-                               "message": f"DeepSeek returned {response.status_code}: {detail}"})
-                    return
-                async for line in response.aiter_lines():
-                    if not line.startswith("data:"):
-                        continue
+    started = time.monotonic()
+    state: dict = {"usage": None, "error": None, "timed_out": False}
+
+    async def run(client, model: str, deadline: float | None):
+        """Stream one completion, yielding SSE events as they arrive.
+
+        `deadline` abandons a run that is still reasoning with no answer begun,
+        so the caller can fall back to a faster model while time remains.
+        """
+        async with client.stream(
+            "POST", DEEPSEEK_URL,
+            headers={"Authorization": f"Bearer {key}",
+                     "Content-Type": "application/json"},
+            json={"model": model, "stream": True, "messages": messages},
+        ) as response:
+            if response.status_code != 200:
+                detail = (await response.aread()).decode("utf-8", "replace")[:400]
+                state["error"] = f"DeepSeek returned {response.status_code}: {detail}"
+                return
+            async for line in response.aiter_lines():
+                if line.startswith("data:"):
                     data = line[5:].strip()
                     if data == "[DONE]":
                         break
                     try:
                         parsed = json.loads(data)
                     except json.JSONDecodeError:
-                        continue
-                    if parsed.get("usage"):
-                        usage = parsed["usage"]
-                    for choice in parsed.get("choices", []):
-                        delta = choice.get("delta") or {}
-                        if delta.get("reasoning_content"):
-                            yield sse({"type": "reasoning",
-                                       "text": delta["reasoning_content"]})
-                        if delta.get("content"):
-                            answer_parts.append(delta["content"])
-                            yield sse({"type": "answer", "text": delta["content"]})
+                        parsed = None
+                    if parsed:
+                        if parsed.get("usage"):
+                            state["usage"] = parsed["usage"]
+                        for choice in parsed.get("choices", []):
+                            delta = choice.get("delta") or {}
+                            if delta.get("reasoning_content"):
+                                yield sse({"type": "reasoning",
+                                           "text": delta["reasoning_content"]})
+                            if delta.get("content"):
+                                answer_parts.append(delta["content"])
+                                yield sse({"type": "answer",
+                                           "text": delta["content"]})
+                if (deadline is not None and not answer_parts
+                        and time.monotonic() - started > deadline):
+                    state["timed_out"] = True
+                    return
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=15.0)) as client:
+            async for event in run(client, MODEL, ANSWER_DEADLINE):
+                yield event
+            if state["error"]:
+                yield sse({"type": "error", "message": state["error"]})
+                return
+            if state["timed_out"] and not answer_parts:
+                yield sse({"type": "notice", "message":
+                           f"The reasoning model was still thinking after "
+                           f"{int(ANSWER_DEADLINE)}s, so the answer comes from "
+                           f"{FALLBACK_MODEL}, using the same passages."})
+                async for event in run(client, FALLBACK_MODEL, None):
+                    yield event
+                if state["error"]:
+                    yield sse({"type": "error", "message": state["error"]})
+                    return
     except httpx.HTTPError as exc:
         yield sse({"type": "error", "message": f"Could not reach DeepSeek: {exc}"})
         return
 
+    usage = state["usage"]
     answer = "".join(answer_parts)
     if answer:
         yield sse({"type": "verified", "quotes": verify_answer(answer)})
+    else:
+        yield sse({"type": "error",
+                   "message": "The model produced reasoning but no answer."})
     yield sse({"type": "done", "usage": usage})
 
 
