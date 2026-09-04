@@ -57,7 +57,7 @@ APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 # So the reasoning model gets a budget, and if it has not begun answering by
 # then the same passages go to the fast model, which answers in a few seconds.
 FALLBACK_MODEL = os.environ.get("DEEPSEEK_FALLBACK_MODEL", "deepseek-chat")
-ANSWER_DEADLINE = float(os.environ.get("ANSWER_DEADLINE_S", "38"))
+ANSWER_DEADLINE = float(os.environ.get("ANSWER_DEADLINE_S", "150"))
 
 # Eight passages with their neighbours made a ~10.7k-character prompt that the
 # model deliberated over exhaustively. Five keeps the neighbouring paragraphs,
@@ -320,6 +320,8 @@ async def health():
         "password_required": bool(APP_PASSWORD),
         "key_configured": bool(os.environ.get("DEEPSEEK_API_KEY")),
         "model": MODEL,
+        "fallback_model": FALLBACK_MODEL,
+        "answer_deadline_s": ANSWER_DEADLINE,
         "root": str(ROOT),
         "corpus_dir": CORPUS_DIR,
         "corpus_dir_exists": Path(CORPUS_DIR).is_dir(),
