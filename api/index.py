@@ -40,7 +40,7 @@ Retriever = None
 IMPORT_ERROR: str | None = None
 try:
     from vachanamrut_rag.retrieve import Retriever  # type: ignore[no-redef]
-    from vachanamrut_web import history, store, vouchers
+    from vachanamrut_web import db, history, vouchers
 except Exception:                                   # bundling or dependency fault
     IMPORT_ERROR = traceback.format_exc()
 
@@ -185,6 +185,12 @@ class Ask(BaseModel):
 
 class Login(BaseModel):
     password: str = Field(default="", max_length=200)
+
+
+class Feedback(BaseModel):
+    id: str = Field(default="", max_length=32)
+    rating: int | None = Field(default=None, ge=0, le=5)
+    comment: str = Field(default="", max_length=2000)
 
 
 class VoucherCheck(BaseModel):
@@ -359,6 +365,15 @@ async def history_entry(request: Request):
     return entry
 
 
+async def feedback_add(body: Feedback):
+    result = history.add_feedback(body.id, body.rating, body.comment)
+    return JSONResponse(result, status_code=200 if result.get("ok") else 400)
+
+
+async def stats():
+    return history.stats()
+
+
 async def ask(body: Ask, supplied_password: str | None):
     if not password_ok(supplied_password):
         return JSONResponse({"ok": False, "error": "Password required."}, status_code=401)
@@ -390,7 +405,7 @@ async def health():
         "answer_deadline_s": ANSWER_DEADLINE,
         "vouchers_enabled": bool(IMPORT_ERROR is None and vouchers.enabled()),
         "questions_per_voucher": None if IMPORT_ERROR else vouchers.QUESTIONS_PER_VOUCHER,
-        "storage": None if IMPORT_ERROR else store.describe(),
+        "storage": None if IMPORT_ERROR else db.describe(),
         "history_entries": None if IMPORT_ERROR else history.count(),
         "root": str(ROOT),
         "corpus_dir": CORPUS_DIR,
@@ -461,11 +476,23 @@ async def dispatch(request: Request, rest: str):
     if action == "entry":
         return await history_entry(request)
 
+    if action == "feedback":
+        try:
+            body = Feedback(**(await request.json()))
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": f"Bad request: {exc}"},
+                                status_code=422)
+        return await feedback_add(body)
+
+    if action == "stats":
+        return await stats()
+
     return JSONResponse({
         "error": "No such endpoint.",
         "action": action,
         "received_path": request.url.path,
-        "available": ["ask", "login", "health", "voucher", "history", "entry"],
+        "available": ["ask", "login", "health", "voucher", "history",
+                      "entry", "feedback", "stats"],
     }, status_code=404)
 
 

@@ -167,6 +167,46 @@
   @keyframes blink { 50% { opacity: 0; } }
   .hidden { display: none !important; }
 
+  /* ---- feedback ---- */
+  .fb-form { padding: 16px 18px; }
+  .fb-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 11px; }
+  .fb-label { font-size: 13px; color: var(--ink-soft); }
+  .rates { display: flex; gap: 5px; }
+  .rate {
+    width: 34px; height: 32px; border: 1px solid var(--line); background: var(--panel);
+    color: var(--ink-soft); border-radius: 7px; cursor: pointer;
+    font: 600 13.5px var(--sans);
+  }
+  .rate:hover { border-color: var(--accent); color: var(--accent); }
+  .rate.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .rate-hint { font-size: 11.5px; color: var(--ink-faint); }
+  .fb-text {
+    width: 100%; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--ink); font: 14.5px var(--sans);
+    padding: 10px 12px; outline: 0; resize: vertical; min-height: 62px;
+  }
+  .fb-text:focus { border-color: var(--accent); }
+  .fb-send {
+    margin-top: 9px; border: 0; border-radius: 8px; cursor: pointer;
+    background: var(--accent); color: #fff; font: 600 13.5px var(--sans);
+    padding: 9px 18px;
+  }
+  .fb-send:disabled { opacity: .5; cursor: default; }
+  .fb-msg { font-size: 12.5px; margin-top: 9px; min-height: 16px; }
+  .fb-msg.ok { color: var(--ok); }
+  .fb-msg.no { color: var(--warn); }
+
+  .fb-item { border-top: 1px solid var(--line); padding: 13px 18px; }
+  .fb-head { display: flex; align-items: center; gap: 9px; margin-bottom: 5px; }
+  .score {
+    font: 600 11.5px var(--sans); border-radius: 5px; padding: 3px 8px;
+    color: var(--accent); background: var(--accent-soft);
+  }
+  .score.good { color: var(--ok); background: var(--ok-soft); }
+  .score.poor { color: var(--warn); background: var(--warn-soft); }
+  .fb-time { font-size: 11.5px; color: var(--ink-faint); }
+  .fb-comment { font-family: var(--serif); font-size: 15px; color: var(--ink-soft); margin: 0; }
+
   /* ---- history ---- */
   .search {
     width: 100%; border: 1px solid var(--line); border-radius: var(--radius);
@@ -275,6 +315,11 @@
     <section class="card hidden" id="verified">
       <h2 data-toggle><span class="caret">▾</span> Quotation check <span class="count" id="v-count"></span></h2>
       <div class="body" id="v-body"></div>
+    </section>
+
+    <section class="card hidden" id="feedback">
+      <h2 data-toggle><span class="caret">▾</span> Feedback <span class="count" id="fb-count"></span></h2>
+      <div id="fb-body"></div>
     </section>
 
     <section class="card collapsed hidden" id="sources">
@@ -469,6 +514,85 @@ const verifiedHTML = quotes => (quotes || []).map(q => `
     </div>
   </div>`).join("");
 
+/* ---------- feedback --------------------------------------------------------
+   Anonymous by construction: a rating, a comment and a time, nothing else. The
+   same component renders under a fresh answer and inside a history entry, so
+   anyone reading an old question can add to it.                              */
+const RATING_WORDS = ["bad", "poor", "fair", "ok", "good", "very good"];
+const scoreClass = r => r >= 4 ? "good" : r <= 1 ? "poor" : "";
+
+const feedbackListHTML = list => (list || []).map(f => `
+  <div class="fb-item">
+    <div class="fb-head">
+      ${f.rating === null || f.rating === undefined ? ""
+        : `<span class="score ${scoreClass(f.rating)}">${f.rating}/5 &middot; ${RATING_WORDS[f.rating]}</span>`}
+      <span class="fb-time">${when(f.ts)}</span>
+    </div>
+    ${f.comment ? `<p class="fb-comment">${esc(f.comment)}</p>` : ""}
+  </div>`).join("");
+
+function feedbackHTML(entryId, list) {
+  return `
+    <div class="fb-list">${feedbackListHTML(list)}</div>
+    <div class="fb-form" data-entry="${esc(entryId)}">
+      <div class="fb-row">
+        <span class="fb-label">How was this answer?</span>
+        <div class="rates">
+          ${[0,1,2,3,4,5].map(n => `<button type="button" class="rate" data-n="${n}">${n}</button>`).join("")}
+        </div>
+        <span class="rate-hint">0 = bad &middot; 5 = very good</span>
+      </div>
+      <textarea class="fb-text" placeholder="Add a comment (optional)"></textarea>
+      <button type="button" class="fb-send">Send feedback</button>
+      <div class="fb-msg"></div>
+    </div>`;
+}
+
+function wireFeedback(root, onSaved) {
+  if (!root) return;
+  const form = root.querySelector(".fb-form");
+  if (!form) return;
+  let chosen = null;
+
+  form.querySelectorAll(".rate").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const n = Number(btn.dataset.n);
+      chosen = chosen === n ? null : n;
+      form.querySelectorAll(".rate").forEach(b =>
+        b.classList.toggle("on", chosen !== null && Number(b.dataset.n) === chosen));
+    });
+  });
+
+  const send = form.querySelector(".fb-send");
+  const msg = form.querySelector(".fb-msg");
+  send.addEventListener("click", async () => {
+    const text = form.querySelector(".fb-text").value.trim();
+    if (chosen === null && !text) {
+      msg.className = "fb-msg no"; msg.textContent = "Add a rating or a comment."; return;
+    }
+    send.disabled = true; msg.className = "fb-msg"; msg.textContent = "Sending…";
+    try {
+      const res = await fetch("/api/feedback", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: form.dataset.entry, rating: chosen, comment: text }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        root.querySelector(".fb-list").innerHTML = feedbackListHTML(data.feedback);
+        form.querySelector(".fb-text").value = "";
+        form.querySelectorAll(".rate").forEach(b => b.classList.remove("on"));
+        chosen = null;
+        msg.className = "fb-msg ok"; msg.textContent = "Thank you — saved.";
+        if (onSaved) onSaved(data.feedback.length);
+      } else {
+        msg.className = "fb-msg no"; msg.textContent = data.error || "Could not save.";
+      }
+    } catch {
+      msg.className = "fb-msg no"; msg.textContent = "Could not reach the server.";
+    } finally { send.disabled = false; }
+  });
+}
+
 /* ---------- ask ------------------------------------------------------------- */
 let busy = false;
 
@@ -479,7 +603,9 @@ $("form").addEventListener("submit", async e => {
   busy = true; $("go").disabled = true; $("go").textContent = "Asking…";
 
   $("error").classList.add("hidden"); $("notice").classList.add("hidden");
-  for (const id of ["thinking", "answer", "verified", "sources"]) $(id).classList.add("hidden");
+  for (const id of ["thinking", "answer", "verified", "sources", "feedback"])
+    $(id).classList.add("hidden");
+  $("fb-body").innerHTML = ""; $("fb-count").textContent = "";
   $("think-body").textContent = ""; $("answer-body").innerHTML = "";
   $("v-body").innerHTML = ""; $("s-body").innerHTML = "";
   $("thinking").classList.remove("collapsed");
@@ -555,6 +681,13 @@ $("form").addEventListener("submit", async e => {
           $("v-body").innerHTML = verifiedHTML(ev.quotes);
         }
 
+        if (ev.type === "done" && ev.entry_id && answer) {
+          $("fb-body").innerHTML = feedbackHTML(ev.entry_id, []);
+          $("feedback").classList.remove("hidden");
+          wireFeedback($("fb-body"), n =>
+            $("fb-count").textContent = n + (n === 1 ? " comment" : " comments"));
+        }
+
         if (ev.type === "done" && !answer) {
           fail("The model returned reasoning but no answer. Try rephrasing, "
              + "or ask a more specific question.");
@@ -615,6 +748,10 @@ function drawHistory() {
             ${e.quote_count ? `<span class="badge ${
               e.verified_count === e.quote_count ? "ok" : "no"}">${
               e.verified_count}/${e.quote_count} verbatim</span>` : ""}
+            ${e.avg_rating !== null && e.avg_rating !== undefined
+              ? `<span class="score ${scoreClass(e.avg_rating)}">${e.avg_rating}/5</span>` : ""}
+            ${e.comment_count ? `<span class="fb-time">${e.comment_count} ${
+              e.comment_count === 1 ? "comment" : "comments"}</span>` : ""}
           </div>
         </div>
         <span class="hdate">${when(e.ts)}</span>
@@ -659,9 +796,15 @@ async function toggleEntry(item) {
         <h2 data-toggle><span class="caret">▾</span> Retrieved passages
           <span class="count">${(e.sources || []).length}</span></h2>
         <div class="srcwrap">${sourcesHTML(e.sources)}</div>
+      </section>
+      <section class="card">
+        <h2 data-toggle><span class="caret">▾</span> Feedback
+          <span class="count">${(e.feedback || []).length || ""}</span></h2>
+        <div class="fb-wrap">${feedbackHTML(e.id, e.feedback)}</div>
       </section>`;
     detail.dataset.loaded = "1";
     wireToggles(detail);
+    wireFeedback(detail.querySelector(".fb-wrap"), () => { historyCache = null; });
   } catch {
     detail.innerHTML = '<div class="hempty">That entry could not be loaded.</div>';
   }

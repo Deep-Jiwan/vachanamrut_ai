@@ -21,3 +21,8 @@ dist/
 
 # Voucher codes and the secret that derives them — never commit
 vouchers.txt
+
+# Local SQLite database
+*.db
+*.db-wal
+*.db-shm
